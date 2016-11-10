@@ -201,13 +201,15 @@ static void sbull_full_request(struct request_queue *q)
 /*
  * The direct make request version.
  */
-static void sbull_make_request(struct request_queue *q, struct bio *bio)
+static blk_qc_t sbull_make_request(struct request_queue *q, struct bio *bio)
 {
 	struct sbull_dev *dev = q->queuedata;
 	int status;
 
 	status = sbull_xfer_bio(dev, bio);
-	bio_endio(bio, status);
+	bio_endio(bio);
+        
+        return BLK_QC_T_NONE;
 }
 
 
@@ -392,7 +394,7 @@ static void setup_device(struct sbull_dev *dev, int which)
 	dev->gd = alloc_disk(SBULL_MINORS);
 	if (! dev->gd) {
 		printk (KERN_NOTICE "alloc_disk failure\n");
-		goto out_vfree;
+		goto out_free_queue;
 	}
 	dev->gd->major = sbull_major;
 	dev->gd->first_minor = which*SBULL_MINORS;
@@ -404,6 +406,8 @@ static void setup_device(struct sbull_dev *dev, int which)
 	add_disk(dev->gd);
 	return;
 
+  out_free_queue:
+        blk_cleanup_queue(dev->queue);
   out_vfree:
 	if (dev->data)
 		vfree(dev->data);
@@ -451,10 +455,7 @@ static void sbull_exit(void)
 			put_disk(dev->gd);
 		}
 		if (dev->queue) {
-			if (request_mode == RM_NOQUEUE)
-				blk_put_queue(dev->queue);
-			else
-				blk_cleanup_queue(dev->queue);
+			blk_cleanup_queue(dev->queue);
 		}
 		if (dev->data)
 			vfree(dev->data);
